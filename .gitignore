@@ -1,0 +1,13 @@
+# Data — too big for GitHub and not ours to redistribute
+data/
+Datasets/
+models/
+
+# Local tool settings (machine-specific)
+.claude/
+
+# Jupyter's temporary checkpoint copies
+.ipynb_checkpoints/
+
+# Python cache junk
+__pycache__/
