@@ -79,6 +79,21 @@ New decision locked in 2026-07-31 (see §7 for full rationale):
    `language` column as a ready-to-flip switch. Revisit empirically when building
    clusters. The better long-term answer is likely *multilingual support*, not filtering.
 
+New decisions locked in 2026-08-03:
+
+8. **Clustering settings (per app):** UMAP(n_neighbors=15, n_components=5,
+   metric="cosine", random_state=42, **init="random"** — default spectral init produces
+   all-NaN output on this data) → HDBSCAN(**min_cluster_size=30, min_samples=5**).
+   Validated on Netflix-10k: 31 coherent topics, 26% noise.
+9. **Sentiment model:** `lxyuan/distilbert-base-multilingual-cased-sentiments-student`
+   (multilingual, CPU-friendly). Chosen over the larger XLM-RoBERTa after a 1.1 GB
+   download repeatedly stalled on this connection. Benchmarked vs star ratings:
+   1★→73% negative, 5★→88% positive. Good enough; documented trade.
+10. **Report generation is template-based (no LLM required).** The topic table +
+    sentiment already contain the report's facts; v1 fills fixed sentences with real
+    numbers. An LLM polish layer is an OPTIONAL plug-in (only if ANTHROPIC_API_KEY is
+    present), never a hard dependency.
+
 ---
 
 ## 5. Data files and lineage

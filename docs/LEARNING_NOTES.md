@@ -176,10 +176,76 @@ upstream in UMAP. When code fails, check what each stage actually produced (we p
 7 clusters found, 4.6% noise
 sizes: two huge blobs (6115 + 2930) + five small specific topics (58–167 each)
 ```
-The blobs are probably broad "positive" vs "negative" masses. Useful topics need finer
-splitting — that's **tuning**, the next thing we do. Knobs available: `min_cluster_size`
-(smaller = more, finer topics), `min_samples` (higher = stricter, more noise), or
-re-clustering *inside* a blob.
+The blobs turned out to be generic mixed chatter ("good app", "love Netflix" — average
+score ~2.8, i.e. neither a happy nor an angry crowd). Not hidden topics — just mush.
+
+### Tuning (how we split the mush into topics)
+We tested settings by *reading the resulting clusters*, not by any single magic metric:
+- `min_cluster_size=50, min_samples=10` → 7 clusters (the blobs)
+- **`min_cluster_size=30, min_samples=5` → 31 clusters, 26% noise ← chosen**
+- `min_cluster_size=15, min_samples=3` → 100 fragments, 40% noise (too shattered)
+
+The chosen setting produced a genuinely PM-ready topic list: login/password failures
+(avg 1.5⭐), payment/billing (1.5⭐), crashes & won't-open errors (1.6⭐), subtitle bugs,
+Chromecast issues, download failures, brightness complaints, pricing anger — plus happy
+clusters (ease-of-use 4.8⭐, content quality 4.3⭐) and feature requests (more
+Hindi/Kannada/regional content).
+
+**A predicted flaw made visible:** one cluster (n=145, top words "hai, hi, ka, bhi")
+is entirely **Romanized Hindi** — the "Hinglish leaks through as English" gap we
+documented in HANDOFF §7. The clustering quarantined it on its own. A limitation you
+can *see* is far better than one you're blind to.
+
+---
+
+## Step 7 — Cluster labelling → the topic table (Stage 3)
+
+Each cluster is just a number (c20). To make it readable we compute, per cluster:
+- **size** (how many reviews), **average star score** (how angry),
+- **top words** (most frequent words, ignoring filler like "the"/"is" — this is
+  `CountVectorizer` with `stop_words="english"`),
+- an **example review**.
+
+Result: a 31-row table — effectively the first real ReviewIQ output. Saved as Parquet
+(for the pipeline) *and* CSV (user-facing; opens in Excel). Low-score rows read as the
+pain-point list; high-score rows as the pros.
+
+---
+
+## Step 8 — Sentiment (Stage 4)
+
+**Why, when we already have stars?** The star rates the *app*; the text is what the user
+*said*. They can disagree ("5 stars but please fix subtitles") — and only the text tells
+you what a PM can act on. Text sentiment also cross-checks the clusters.
+
+**How:** an off-the-shelf multilingual model (a distilled student of a larger model —
+smaller, ~2× faster on CPU, slightly less accurate; the deadline-week trade). Each review
+gets a label (negative/neutral/positive) + the model's confidence.
+
+**Before trusting it, we benchmarked it** on 300 reviews with known stars: 87% of 5-star
+text called positive, 73% of 1-star called negative — and most "errors" were actually
+reviews whose text really does disagree with its star rating. Good enough; proceed.
+
+**Result on the 10k:** a clean staircase — 1⭐ text is 73% negative, 5⭐ is 88% positive,
+smooth gradient between. 4,652 negative / 4,540 positive / 808 neutral overall.
+
+**Ops lessons from this stage** (they cost us an afternoon):
+- A 1.1 GB model download on a flaky connection stalls forever; a smaller model that
+  *downloads and runs reliably* beats a bigger one that doesn't arrive.
+- "Run All" re-executes everything, including hours of already-done compute. After a
+  kernel restart: run a *recovery cell* (reload state from the saved Parquet), then
+  continue. The kernel is disposable; the files are the truth.
+
+---
+
+## Step 9 — The report, without an LLM (decision)
+
+The original design used an LLM to write the final summary. We realized the pipeline's
+outputs (topic table + sentiment) already *contain* the report — pain points, pros,
+feature requests are all rows and numbers. So v1 generates the report from **templates**:
+real numbers slotted into fixed sentences. Zero cost, works offline, zero hallucination
+risk. The LLM becomes an optional "polish" layer that can be plugged in later (graceful
+degradation — a genuinely good production pattern).
 
 ---
 
@@ -190,9 +256,10 @@ re-clustering *inside* a blob.
 - [x] EDA
 - [x] Language measured; decision: keep all, use multilingual models
 - [x] Stage 1: embeddings work (verified by nearest-neighbour check)
-- [~] Stage 2: clustering runs; needs tuning to split the two giant blobs
-- [ ] Stage 3: label each cluster (top words + representative reviews)
-- [ ] Stage 4: sentiment per review (off-the-shelf model)
-- [ ] Stage 5: LLM summary (executive summary, pain points, feature requests)
+- [x] Stage 2: clustering tuned — 31 topics, 26% noise (mcs=30, ms=5)
+- [x] Stage 3: topic table with labels, sizes, scores, examples (netflix_topics.csv)
+- [x] Stage 4: sentiment on all 10k (validated: 73%/88% staircase vs stars)
+- [ ] Stage 5: template-based report (exec summary, pain points, feature requests) —
+      LLM optional later
 - [ ] Scale from Netflix-10k to all five apps
 - [ ] Wrap as the actual product flow (CSV in → report out)
