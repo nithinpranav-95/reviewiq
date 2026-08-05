@@ -205,20 +205,50 @@ Proposed rule if we ever enable it: drop a review only if `char_len >= 30` AND
 
 ---
 
-## 8. Immediate next steps
+## 8. Immediate next steps (demo week — updated 2026-08-05)
 
-1. Finish/tidy `02.EDA.ipynb` (save it — the notebook has bitten us once by showing 0
-   bytes on disk when unsaved).
-2. Begin the **NLP pipeline** (new notebook/scripts in `src/`):
-   - Embeddings — **per app**, excluding `content` length < 10.
-   - Clustering — **per app** (unsupervised).
-   - Sentiment — off-the-shelf.
-   - LLM summarization — executive summary, pain points, feature requests, pros/cons.
-3. Decide embedding model (English vs multilingual) — ties directly to §7.
+1. ✅ Pipeline built and validated on Netflix 10k (31 topics; sentiment staircase
+   73%/88%; baselines beaten — see docs/PRESENTATION_QA.md).
+2. ✅ Report generator (template-based) — reports/netflix_report.md.
+3. ✅ Reusable engine `src/reviewiq.py` (same functions serve batch runs and the
+   future product wrapper). Full 5-app batch run launched 2026-08-05.
+4. ⏳ Day 6: read all 5 reports; end-to-end rehearsal — a fresh ~100-review CSV
+   through `run_pipeline()` (the exact demo scenario). Note: small corpora need the
+   scaled-down cluster settings (already implemented: `mcs = max(5, 0.3% of n)`).
+5. ⏳ Day 7: buffer + presentation rehearsal (LEARNING_NOTES is the talk script).
 
 ---
 
-## 9. Scratch / reproducibility notes
+## 9. Post-bootcamp roadmap (decided 2026-08-05)
+
+Goal: turn ReviewIQ into a **portfolio product** — something a recruiter can click,
+not just read. Three tiers; the commitment is **Tier 2, then stop**.
+
+**Tier 1 — repo reads like a product (~1 day):**
+- Add Kaggle source links + a screenshot/GIF of the report to the README.
+- Add a personal "what I learned" section in the developer's own voice.
+- Record (or summarize) the capstone presentation.
+
+**Tier 2 — live demo (~2–4 days) ← the target:**
+- Streamlit app: upload CSV (or "try sample data" button) → report on screen.
+  Thin layer over `reviewiq.run_pipeline()`; no new stack needed.
+- Deploy to **Hugging Face Spaces** free tier (2 vCPU, enough disk for the ~1 GB of
+  models; the pipeline is already CPU-only). Streamlit Community Cloud is the fallback
+  but its ~1 GB RAM limit is tight for these models.
+- Put the live link at the top of the README, on CV/LinkedIn. Then **declare it done.**
+
+**Tier 3 — actual product (months; only if genuinely wanted):**
+- Play-Store scraping (no CSV needed), scheduled re-runs, accounts, LLM polish layer
+  (decision #10's socket), Hinglish detection via fastText, per-language reports.
+- A marketing frontend (this is where a tool like Lovable could fit — never before
+  the working demo exists).
+
+**Anti-goal:** the half-migrated repo ("WIP: moving to React") that sits unfinished.
+A shipped Tier 2 beats an unshipped Tier 3. Finish, link it, start the next project.
+
+---
+
+## 10. Scratch / reproducibility notes
 
 - Language detection over 495,967 rows took ~16 min (detects once per unique text,
   359,391 uniques). Cache the `language` column; never re-run casually.

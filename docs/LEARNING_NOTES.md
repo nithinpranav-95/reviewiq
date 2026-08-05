@@ -249,6 +249,49 @@ degradation — a genuinely good production pattern).
 
 ---
 
+## Step 10 — The report generator (Stage 5)
+
+The report is a **template**: fixed sentences with real numbers and quotes slotted in
+("mail merge"). Three transparent rules sort topics into sections:
+- **Pain point** = cluster with average score ≤ 2.5★
+- **Pro** = cluster with average score ≥ 4.0★
+- **Feature request** = cluster where over half the reviews contain asking-words
+  ("add", "please", "wish", "want"…)
+
+Quote selection matters: we pick the *longest of the first 20 negative* reviews in a
+cluster — long complaints are usually the articulate ones. (First attempt took the
+first negative review and produced the majestic quote "Trouble login in".)
+
+Every threshold is visible and defensible — no black box, no API, no hallucination
+risk. Result: `reports/netflix_report.md` reads like something a PM would actually act on.
+
+## Step 11 — From notebook to product (src/reviewiq.py)
+
+The notebook's stages were rewritten as **reusable functions** in one module:
+`gate → embed → cluster → topic_table → add_sentiment → build_report`, wrapped by
+`run_pipeline(any_reviews_dataframe)`. Same logic, two uses:
+- **Batch validation:** a loop runs all 5 apps at full size (~350k reviews) overnight,
+  saving each app's artifacts + report as it finishes (resumable after a crash).
+- **The product:** a PM's CSV goes through the *identical* function.
+
+A smoke test (2,000 reviews) before the overnight launch caught two real bugs:
+clustering collapsed on small corpora (fixed by scaling `min_cluster_size` to 0.3% of
+the corpus instead of a fixed 30 — so 58k reviews use 176, and a 100-review upload
+uses 5), and the template printed a dangling sentence when a section was empty
+(fixed with graceful fallbacks). **Lesson: smoke-test cheap before you compute expensive.**
+
+## Step 12 — The product moment: a 100-review upload
+
+Simulated the real use-case: 100 raw TikTok reviews (just reviewId, content, score)
+→ `run_pipeline()` → a finished report in about a minute. Findings:
+- 100 → 69 after the length gate — matching the 28% short-review rate measured on 500k.
+  The corpus statistics predicted the product's behaviour.
+- The report was honest but thin: the top pain point was 6 reviews of glitch complaints.
+  Real signal, small sample. **Product guidance that falls out of this: ~100 reviews =
+  pulse check; 10,000 reviews = 31 rich themes. Richness scales with input.**
+
+---
+
 ## Where we are / what's next
 
 - [x] Sample & merge (500k)
@@ -259,7 +302,9 @@ degradation — a genuinely good production pattern).
 - [x] Stage 2: clustering tuned — 31 topics, 26% noise (mcs=30, ms=5)
 - [x] Stage 3: topic table with labels, sizes, scores, examples (netflix_topics.csv)
 - [x] Stage 4: sentiment on all 10k (validated: 73%/88% staircase vs stars)
-- [ ] Stage 5: template-based report (exec summary, pain points, feature requests) —
-      LLM optional later
-- [ ] Scale from Netflix-10k to all five apps
-- [ ] Wrap as the actual product flow (CSV in → report out)
+- [x] Stage 5: template-based report generator (reports/netflix_report.md)
+- [x] Pipeline packaged as reusable module (src/reviewiq.py)
+- [x] Product flow proven: 100-review CSV → report in ~1 minute
+- [~] Scale to all five apps: batch running (chatgpt ✓, facebook ✓, 3 queued)
+- [ ] Day 6: read all 5 reports, record the Stage-6 demo cell in the notebook
+- [ ] Day 7: presentation rehearsal (this document is the talk script)

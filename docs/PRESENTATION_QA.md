@@ -101,20 +101,21 @@ rule about how to use them:
 
 ## 5. Timeline and where we are
 
-One-week sprint to demo (started Day 1 = two working days ago):
+One-week sprint to demo (updated Day 5):
 
 | Day | Plan | Status |
 |---|---|---|
-| 1 | Tune clustering | ✅ done (31 topics, 26% noise) |
-| 2 | Label clusters + sentiment | ✅ done + validated |
-| 3 | Report generator (template-based) | ← we are here, ahead of schedule |
-| 4 | LLM summary | replaced by decision: templates now, LLM optional |
-| 5 | Scale to all 5 apps + product wrapper | |
-| 6 | End-to-end rehearsal, README, polish | |
-| 7 | Buffer + presentation prep | |
+| 1 | Tune clustering | ✅ 31 topics, 26% noise |
+| 2 | Label clusters + sentiment | ✅ validated (73%/88% staircase) |
+| 3 | Report generator (template-based) | ✅ reports/netflix_report.md |
+| 4 | Pipeline → reusable module (src/reviewiq.py) | ✅ smoke test caught 2 bugs pre-launch |
+| 5 | Full-scale run: all 5 apps, ~350k reviews | ✅ 4/5 apps complete, TikTok in flight; 100-review product scenario proven (~1 min CSV→report) |
+| 6 | Read all 5 reports, end-to-end rehearsal | ← next |
+| 7 | Buffer + presentation prep | buffer intact |
 
 Everything upstream (sampling, cleaning, EDA, embeddings) was complete before Day 1.
-Currently **~1 day ahead of plan**.
+Currently **~1 day ahead of plan** — Day 4's LLM stage was replaced by the
+template-based decision (#10), which bought the schedule margin.
 
 ## 6. Future work and expected difficulties
 
