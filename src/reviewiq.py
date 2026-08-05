@@ -73,8 +73,24 @@ def cluster(embeddings):
 
     reduced = umap.UMAP(n_neighbors=15, n_components=5, metric="cosine",
                         random_state=42, init="random").fit_transform(embeddings)
-    labels = hdbscan.HDBSCAN(min_cluster_size=mcs, min_samples=ms,
-                             metric="euclidean").fit_predict(reduced)
+
+    # The scaled settings can still be too coarse for a homogeneous corpus
+    # (TikTok at 74k collapsed into 2 blobs). If the result is degenerate —
+    # almost no clusters, or one cluster swallowing most reviews — retry
+    # with finer settings before accepting it.
+    for attempt in range(3):
+        labels = hdbscan.HDBSCAN(min_cluster_size=mcs, min_samples=ms,
+                                 metric="euclidean").fit_predict(reduced)
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        biggest = max(np.bincount(labels[labels != -1]), default=0) if n_clusters else 0
+        degenerate = n_clusters < 5 or (n > 1000 and biggest > 0.5 * n)
+        if not degenerate or mcs <= 5:
+            break
+        mcs = max(5, mcs // 2)
+        ms = max(3, mcs // 6)
+        print(f"    degenerate clustering ({n_clusters} clusters, biggest {biggest}) "
+              f"-> retrying with mcs={mcs}, ms={ms}", flush=True)
+
     return labels, {"min_cluster_size": mcs, "min_samples": ms}
 
 
@@ -228,9 +244,12 @@ def main():
     """Batch run over all 5 apps. Resumable: skips an app whose report exists."""
     master = pd.read_parquet(DATA / "master_clean_lang.parquet")
     for app in sorted(master["app_name"].unique()):
-        done_marker = REPORTS / f"{app}_report.md"
+        # Resume marker: the batch's OWN artifact, not the report file.
+        # (A report generated elsewhere — e.g. the notebook's 10k prototype —
+        # once made the batch silently skip a full-scale run.)
+        done_marker = SCALE_DIR / f"{app}_topics.parquet"
         if done_marker.exists():
-            print(f"SKIP {app} (report exists)", flush=True)
+            print(f"SKIP {app} (full-run artifacts exist)", flush=True)
             continue
         print(f"=== {app} ===", flush=True)
         run_pipeline(master[master["app_name"] == app], app, out_dir=SCALE_DIR)
