@@ -37,6 +37,11 @@ clever/terse code, and explain what things do.
   **lacks `pyarrow`**, so it cannot read/write the Parquet files. Several other Pythons
   (Python312, Python314, pyenv 3.13.11) are also installed and also lack `pyarrow`.
   When running project code from a terminal, call the Anaconda interpreter explicitly.
+- ⚠️ **The Jupyter kernelspec named `python3` ALSO points at the pyenv shim** — headless
+  execution (`jupyter nbconvert --execute`) silently used it and died on `read_parquet`.
+  Fixed 2026-08-05: a proper kernel named **"Python (anaconda base)"** (`anaconda-base`)
+  is registered. Pick that kernel in VS Code / pass
+  `--ExecutePreprocessor.kernel_name=anaconda-base` to nbconvert.
 - **Notebooks run from `notebooks/`**, so data paths are relative, e.g. `../data/raw`.
   A notebook placed at the project root will break on `../data/...` — keep notebooks in
   `notebooks/`.
