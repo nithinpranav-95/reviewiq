@@ -67,16 +67,66 @@ with tab_explore:
         topics = pd.read_parquet(topics_file)
         st.dataframe(
             topics[["cluster", "n_reviews", "avg_score", "top_words", "example"]],
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
 # ----------------------------------------------------------------- upload tab
+def analyze_and_show(raw: pd.DataFrame, name: str):
+    """Run the pipeline on a DataFrame of reviews and render the results."""
+    with st.spinner("Running the pipeline — embeddings, clustering, "
+                    "sentiment, report… (~1 min per 100 reviews)"):
+        df, topics, report = reviewiq.run_pipeline(
+            raw.dropna(subset=["content"]), name
+        )
+    st.success(f"Done — {len(df):,} reviews analyzed, {topics.shape[0]} topics found.")
+    st.markdown(report)
+    with st.expander("Topic table"):
+        st.dataframe(topics, width="stretch", hide_index=True)
+    st.download_button("Download report (Markdown)", report,
+                       file_name="reviewiq_report.md")
+
+
+def play_store_app_id(url: str) -> str | None:
+    """'https://play.google.com/store/apps/details?id=com.spotify.music&hl=en'
+    -> 'com.spotify.music'. Also accepts a bare app id."""
+    url = url.strip()
+    if "id=" in url:
+        return url.split("id=")[1].split("&")[0]
+    if url and "/" not in url and " " not in url:
+        return url          # looks like a bare app id, e.g. com.spotify.music
+    return None
+
+
 with tab_upload:
-    st.markdown(
-        "Upload a CSV with at least a **`content`** column (review text) and a "
-        "**`score`** column (1–5 stars). The full pipeline runs live: embeddings "
-        "→ topic discovery → sentiment → report."
-    )
+    st.subheader("Paste a Google Play link")
+    st.caption("Any app on the Play Store — we fetch its newest reviews live.")
+    link = st.text_input("Play Store URL (or app id)",
+                         placeholder="https://play.google.com/store/apps/details?id=com.spotify.music")
+    n_reviews = st.slider("How many recent reviews", 50, 500, 200, step=50)
+
+    if st.button("Fetch & analyze", type="primary", disabled=not link):
+        app_id = play_store_app_id(link)
+        if app_id is None:
+            st.error("That doesn't look like a Play Store link — it should contain `id=...`")
+        else:
+            try:
+                from google_play_scraper import reviews as gp_reviews, Sort
+                with st.spinner(f"Fetching {n_reviews} newest reviews for {app_id}…"):
+                    fetched, _ = gp_reviews(app_id, lang="en", country="us",
+                                            sort=Sort.NEWEST, count=n_reviews)
+                if not fetched:
+                    st.error("No reviews returned — check the app id.")
+                else:
+                    raw = pd.DataFrame(fetched)[["reviewId", "content", "score"]]
+                    st.write(f"Fetched **{len(raw):,}** live reviews for `{app_id}`.")
+                    analyze_and_show(raw, app_id)
+            except Exception as e:
+                st.error(f"Fetch failed ({type(e).__name__}) — no internet or Google "
+                         f"changed something. Use the CSV upload below instead.")
+
+    st.divider()
+    st.subheader("…or upload a CSV")
+    st.caption("Needs a `content` column (review text) and a `score` column (1–5 stars).")
     uploaded = st.file_uploader("Reviews CSV", type="csv")
 
     if uploaded is not None:
@@ -86,16 +136,5 @@ with tab_upload:
             st.error(f"CSV is missing required column(s): {', '.join(missing)}")
         else:
             st.write(f"Loaded **{len(raw):,}** reviews.")
-            if st.button("Run ReviewIQ", type="primary"):
-                with st.spinner("Running the pipeline — embeddings, clustering, "
-                                "sentiment, report… (~1 min per 100 reviews)"):
-                    df, topics, report = reviewiq.run_pipeline(
-                        raw.dropna(subset=["content"]), "your upload"
-                    )
-                st.success(f"Done — {len(df):,} reviews analyzed, "
-                           f"{topics.shape[0]} topics found.")
-                st.markdown(report)
-                with st.expander("Topic table"):
-                    st.dataframe(topics, use_container_width=True, hide_index=True)
-                st.download_button("Download report (Markdown)", report,
-                                   file_name="reviewiq_report.md")
+            if st.button("Run ReviewIQ on the CSV"):
+                analyze_and_show(raw, "your upload")
