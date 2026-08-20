@@ -95,6 +95,8 @@ def cluster(embeddings):
 
 
 def top_words(texts, n=6):
+    """Raw-count fallback labeling (used only when there are too few clusters
+    for distinctiveness scoring to work)."""
     from sklearn.feature_extraction.text import CountVectorizer
     vec = CountVectorizer(stop_words="english", min_df=2)
     try:
@@ -106,18 +108,68 @@ def top_words(texts, n=6):
     return [vocab[i] for i in totals.argsort()[::-1][:n]]
 
 
+def distinctive_words(cluster_texts, n=6):
+    """Label each cluster by its most DISTINCTIVE words, not its most frequent.
+
+    Treat each cluster's combined text as one document and TF-IDF across those
+    documents (the c-TF-IDF idea from BERTopic). Corpus-generic words that show
+    up in every cluster ('app', the app's own name, 'playstore') get weighted
+    down to ~0; words concentrated in one cluster ('password', 'subtitles')
+    rise to the top. Input: {cluster_id: [texts]}. Returns {cluster_id: [words]}.
+    """
+    from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+    ids = list(cluster_texts.keys())
+    docs = [" ".join(cluster_texts[c]) for c in ids]
+
+    # Only words appearing in >= 5 individual reviews may become labels —
+    # otherwise one-off typos ("nextflix") look maximally "distinctive".
+    all_reviews = [t for c in ids for t in cluster_texts[c]]
+    try:
+        counter = CountVectorizer(stop_words="english", min_df=5)
+        counter.fit(all_reviews)
+        allowed = counter.get_feature_names_out().tolist()
+    except ValueError:          # tiny corpus: no word clears min_df
+        allowed = None
+
+    vec = TfidfVectorizer(stop_words="english", vocabulary=allowed,
+                          sublinear_tf=True)
+    X = vec.fit_transform(docs)
+    vocab = vec.get_feature_names_out()
+    out = {}
+    for row, c in enumerate(ids):
+        weights = X[row].toarray().ravel()
+        out[c] = [vocab[i] for i in weights.argsort()[::-1][:n] if weights[i] > 0]
+    return out
+
+
 def topic_table(df):
     """One row per cluster: size, avg score, top words, example."""
+    clusters = [c for c in sorted(df["cluster"].unique()) if c != -1]
+
+    # Distinctiveness scoring needs several clusters to compare against each
+    # other; with very few, fall back to plain counts.
+    if len(clusters) >= 3:
+        texts_by_cluster = {c: df.loc[df["cluster"] == c, "content"].tolist()
+                            for c in clusters}
+        labels = distinctive_words(texts_by_cluster)
+    else:
+        labels = {c: top_words(df.loc[df["cluster"] == c, "content"].tolist())
+                  for c in clusters}
+
+    n_clustered = int((df["cluster"] != -1).sum())
     rows = []
-    for c in sorted(df["cluster"].unique()):
-        if c == -1:
-            continue
+    for c in clusters:
         sub = df[df["cluster"] == c]
+        label = ", ".join(labels.get(c, []))
+        # A cluster swallowing >20% of everything is generic chatter, not a
+        # theme — say so instead of pretending its oddball words are a topic.
+        if len(sub) > 0.2 * n_clustered and len(clusters) >= 5:
+            label = f"(general / mixed feedback — {label})"
         rows.append({
             "cluster": c,
             "n_reviews": len(sub),
             "avg_score": round(sub["score"].mean(), 1),
-            "top_words": ", ".join(top_words(sub["content"].tolist())),
+            "top_words": label,
             "example": sub["content"].iloc[0][:80],
         })
     return pd.DataFrame(rows).sort_values("n_reviews", ascending=False)
