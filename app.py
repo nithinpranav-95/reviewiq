@@ -97,31 +97,83 @@ def play_store_app_id(url: str) -> str | None:
     return None
 
 
+def apple_store_app_info(url: str) -> tuple[str, str] | None:
+    """'https://apps.apple.com/us/app/spotify-music/id324684580'
+    -> ('324684580', 'us'). Returns None if it doesn't look like an Apple link."""
+    import re
+    m = re.search(r"apps\.apple\.com/(\w\w)/.*?/id(\d+)", url.strip())
+    if m:
+        return m.group(2), m.group(1)
+    m = re.search(r"apps\.apple\.com/.*?/id(\d+)", url.strip())
+    if m:
+        return m.group(1), "us"
+    return None
+
+
+def fetch_apple_reviews(app_id: str, country: str, n: int) -> pd.DataFrame:
+    """Fetch newest reviews from Apple's public RSS feed (50 per page,
+    up to ~500). Returns a DataFrame with reviewId / content / score."""
+    import json
+    import urllib.request
+
+    rows = []
+    for page in range(1, min(10, (n + 49) // 50) + 1):
+        url = (f"https://itunes.apple.com/{country}/rss/customerreviews/"
+               f"page={page}/id={app_id}/sortby=mostrecent/json")
+        try:
+            with urllib.request.urlopen(url, timeout=15) as r:
+                entries = json.load(r)["feed"].get("entry", [])
+        except Exception:
+            break
+        # the first entry on page 1 is app metadata, not a review
+        for e in entries:
+            if "im:rating" not in e:
+                continue
+            rows.append({
+                "reviewId": e["id"]["label"],
+                "content": (e["title"]["label"] + ". " + e["content"]["label"]).strip(),
+                "score": int(e["im:rating"]["label"]),
+            })
+        if len(entries) < 50:
+            break
+    return pd.DataFrame(rows).head(n)
+
+
 with tab_upload:
-    st.subheader("Paste a Google Play link")
-    st.caption("Any app on the Play Store — we fetch its newest reviews live.")
-    link = st.text_input("Play Store URL (or app id)",
-                         placeholder="https://play.google.com/store/apps/details?id=com.spotify.music")
+    st.subheader("Paste an app-store link")
+    st.caption("Google Play or Apple App Store — we fetch the newest reviews live.")
+    link = st.text_input("Play Store / App Store URL",
+                         placeholder="https://play.google.com/store/apps/details?id=...  or  https://apps.apple.com/us/app/...")
     n_reviews = st.slider("How many recent reviews", 50, 500, 200, step=50)
 
     if st.button("Fetch & analyze", type="primary", disabled=not link):
-        app_id = play_store_app_id(link)
-        if app_id is None:
-            st.error("That doesn't look like a Play Store link — it should contain `id=...`")
+        apple = apple_store_app_info(link)
+        google_id = None if apple else play_store_app_id(link)
+
+        if apple is None and google_id is None:
+            st.error("That doesn't look like a Play Store or App Store link.")
         else:
             try:
-                from google_play_scraper import reviews as gp_reviews, Sort
-                with st.spinner(f"Fetching {n_reviews} newest reviews for {app_id}…"):
-                    fetched, _ = gp_reviews(app_id, lang="en", country="us",
-                                            sort=Sort.NEWEST, count=n_reviews)
-                if not fetched:
-                    st.error("No reviews returned — check the app id.")
+                if apple:
+                    app_id, country = apple
+                    with st.spinner(f"Fetching newest App Store reviews (id {app_id}, {country})…"):
+                        raw = fetch_apple_reviews(app_id, country, n_reviews)
+                    source = f"App Store id {app_id}"
                 else:
-                    raw = pd.DataFrame(fetched)[["reviewId", "content", "score"]]
-                    st.write(f"Fetched **{len(raw):,}** live reviews for `{app_id}`.")
-                    analyze_and_show(raw, app_id)
+                    from google_play_scraper import reviews as gp_reviews, Sort
+                    with st.spinner(f"Fetching {n_reviews} newest reviews for {google_id}…"):
+                        fetched, _ = gp_reviews(google_id, lang="en", country="us",
+                                                sort=Sort.NEWEST, count=n_reviews)
+                    raw = pd.DataFrame(fetched)[["reviewId", "content", "score"]] if fetched else pd.DataFrame()
+                    source = google_id
+
+                if raw.empty:
+                    st.error("No reviews returned — check the link.")
+                else:
+                    st.write(f"Fetched **{len(raw):,}** live reviews for `{source}`.")
+                    analyze_and_show(raw, source)
             except Exception as e:
-                st.error(f"Fetch failed ({type(e).__name__}) — no internet or Google "
+                st.error(f"Fetch failed ({type(e).__name__}) — no internet or the store "
                          f"changed something. Use the CSV upload below instead.")
 
     st.divider()
