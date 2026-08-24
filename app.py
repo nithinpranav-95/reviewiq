@@ -32,6 +32,7 @@ st.caption("Raw app reviews in → decision-ready product report out. "
 tab_explore, tab_upload = st.tabs(["📊 Explore the 5 apps", "⬆️ Upload your CSV"])
 
 # ---------------------------------------------------------------- explore tab
+# ---------------------------------------------------------------- explore tab
 with tab_explore:
     app = st.selectbox("App", APPS, format_func=str.title)
 
@@ -40,7 +41,10 @@ with tab_explore:
     clustered_file = FULL_RUN / f"{app}_clustered.parquet"
 
     if not report_file.exists():
-        st.warning(f"No precomputed report for {app}. Run `python src/scrutinizeiq.py` first.")
+        st.warning(
+            f"No precomputed report for {app}. "
+            "Run `python src/scrutinizeiq.py` first."
+        )
     else:
         left, right = st.columns([3, 2])
 
@@ -48,43 +52,102 @@ with tab_explore:
             st.markdown(report_file.read_text(encoding="utf-8"))
 
         with right:
-            df = pd.read_parquet(clustered_file, columns=["score", "sentiment", "cluster"])
+            if clustered_file.exists():
+                df = pd.read_parquet(
+                    clustered_file,
+                    columns=["score", "sentiment", "cluster"],
+                )
 
-            st.subheader("Sentiment (from review text)")
-            st.bar_chart(df["sentiment"].value_counts())
+                st.subheader("Sentiment (from review text)")
+                st.bar_chart(df["sentiment"].value_counts())
 
-            st.subheader("Star ratings")
-            st.bar_chart(df["score"].value_counts().sort_index())
+                st.subheader("Star ratings")
+                st.bar_chart(df["score"].value_counts().sort_index())
 
-            n_topics = df.loc[df["cluster"] != -1, "cluster"].nunique()
-            noise = (df["cluster"] == -1).mean()
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Reviews", f"{len(df):,}")
-            c2.metric("Topics found", n_topics)
-            c3.metric("Generic filler", f"{noise:.0%}")
+                n_topics = df.loc[
+                    df["cluster"] != -1, "cluster"
+                ].nunique()
+                noise = (df["cluster"] == -1).mean()
 
-        st.subheader("All topics")
-        topics = pd.read_parquet(topics_file)
-        st.dataframe(
-            topics[["cluster", "n_reviews", "avg_score", "top_words", "example"]],
-            width="stretch", hide_index=True,
-        )
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Reviews", f"{len(df):,}")
+                c2.metric("Topics found", n_topics)
+                c3.metric("Generic filler", f"{noise:.0%}")
+            else:
+                st.info(
+                    "Precomputed review data is not available locally. "
+                    "The report below is available, but charts and topic "
+                    "statistics require the processed Parquet files."
+                )
+
+        if topics_file.exists():
+            st.subheader("All topics")
+            topics = pd.read_parquet(topics_file)
+            st.dataframe(
+                topics[
+                    ["cluster", "n_reviews", "avg_score", "top_words", "example"]
+                ],
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            st.info(
+                "The precomputed topic table is not available locally. "
+                "The generated report is still available above."
+            )
 
 # ----------------------------------------------------------------- upload tab
+def display_app_name(name: str) -> str:
+    """Convert store identifiers into readable display names."""
+    known_names = {
+        "com.whatsapp": "WhatsApp",
+        "com.facebook.katana": "Facebook",
+        "com.netflix.mediaclient": "Netflix",
+        "com.snapchat.android": "Snapchat",
+        "com.zhiliaoapp.musically": "TikTok",
+    }
+    return known_names.get(name, name)
+
+
+def report_filename(name: str) -> str:
+    """Create a safe filename for a generated report."""
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return f"{slug}_report.md"
+
+
 def analyze_and_show(raw: pd.DataFrame, name: str):
-    """Run the pipeline on a DataFrame of reviews and render the results."""
-    with st.spinner("Running the pipeline — embeddings, clustering, "
-                    "sentiment, report… (~1 min per 100 reviews)"):
+    """Run the pipeline, render the results, and save the report."""
+    display_name = display_app_name(name)
+
+    with st.spinner(
+        "Running the pipeline — embeddings, clustering, "
+        "sentiment, report… (~1 min per 100 reviews)"
+    ):
         df, topics, report = scrutinizeiq.run_pipeline(
-            raw.dropna(subset=["content"]), name
+            raw.dropna(subset=["content"]), display_name
         )
-    st.success(f"Done — {len(df):,} reviews analyzed, {topics.shape[0]} topics found.")
+
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    report_path = REPORTS / report_filename(name)
+    report_path.write_text(report, encoding="utf-8")
+
+    st.success(
+        f"Done — {len(df):,} reviews analyzed, "
+        f"{topics.shape[0]} topics found."
+    )
+
     st.markdown(report)
+    st.caption(f"Report saved to `{report_path}`")
+
     with st.expander("Topic table"):
         st.dataframe(topics, width="stretch", hide_index=True)
-    st.download_button("Download report (Markdown)", report,
-                       file_name="scrutinizeiq_report.md")
 
+    st.download_button(
+        "Download report (Markdown)",
+        report,
+        file_name=report_filename(name),
+    )
 
 def play_store_app_id(url: str) -> str | None:
     """'https://play.google.com/store/apps/details?id=com.spotify.music&hl=en'
@@ -165,7 +228,11 @@ with tab_upload:
                         fetched, _ = gp_reviews(google_id, lang="en", country="us",
                                                 sort=Sort.NEWEST, count=n_reviews)
                     raw = pd.DataFrame(fetched)[["reviewId", "content", "score"]] if fetched else pd.DataFrame()
-                    source = google_id
+                    source = display_app_name(google_id)
+
+
+
+
 
                 if raw.empty:
                     st.error("No reviews returned — check the link.")
