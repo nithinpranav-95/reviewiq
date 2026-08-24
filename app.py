@@ -1,5 +1,5 @@
 """
-ReviewIQ dashboard — Streamlit UI over the pipeline in src/reviewiq.py.
+ScrutinizeIQ dashboard — Streamlit UI over the pipeline in src/scrutinizeiq.py.
 
 Run from the project root:
     streamlit run app.py
@@ -18,14 +18,14 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-import reviewiq  # noqa: E402  (import after sys.path tweak)
+import scrutinizeiq  # noqa: E402  (import after sys.path tweak)
 
 FULL_RUN = ROOT / "data" / "processed" / "full_run"
 REPORTS = ROOT / "reports"
 APPS = ["chatgpt", "facebook", "netflix", "snapchat", "tiktok"]
 
-st.set_page_config(page_title="ReviewIQ", page_icon="📱", layout="wide")
-st.title("📱 ReviewIQ — Review Intelligence")
+st.set_page_config(page_title="ScrutinizeIQ", page_icon="📱", layout="wide")
+st.title("📱 ScrutinizeIQ — Review Intelligence")
 st.caption("Raw app reviews in → decision-ready product report out. "
            "No training, no APIs — two pretrained models and honest math.")
 
@@ -40,7 +40,7 @@ with tab_explore:
     clustered_file = FULL_RUN / f"{app}_clustered.parquet"
 
     if not report_file.exists():
-        st.warning(f"No precomputed report for {app}. Run `python src/reviewiq.py` first.")
+        st.warning(f"No precomputed report for {app}. Run `python src/scrutinizeiq.py` first.")
     else:
         left, right = st.columns([3, 2])
 
@@ -75,7 +75,7 @@ def analyze_and_show(raw: pd.DataFrame, name: str):
     """Run the pipeline on a DataFrame of reviews and render the results."""
     with st.spinner("Running the pipeline — embeddings, clustering, "
                     "sentiment, report… (~1 min per 100 reviews)"):
-        df, topics, report = reviewiq.run_pipeline(
+        df, topics, report = scrutinizeiq.run_pipeline(
             raw.dropna(subset=["content"]), name
         )
     st.success(f"Done — {len(df):,} reviews analyzed, {topics.shape[0]} topics found.")
@@ -83,7 +83,7 @@ def analyze_and_show(raw: pd.DataFrame, name: str):
     with st.expander("Topic table"):
         st.dataframe(topics, width="stretch", hide_index=True)
     st.download_button("Download report (Markdown)", report,
-                       file_name="reviewiq_report.md")
+                       file_name="scrutinizeiq_report.md")
 
 
 def play_store_app_id(url: str) -> str | None:
@@ -188,5 +188,5 @@ with tab_upload:
             st.error(f"CSV is missing required column(s): {', '.join(missing)}")
         else:
             st.write(f"Loaded **{len(raw):,}** reviews.")
-            if st.button("Run ReviewIQ on the CSV"):
+            if st.button("Run ScrutinizeIQ on the CSV"):
                 analyze_and_show(raw, "your upload")

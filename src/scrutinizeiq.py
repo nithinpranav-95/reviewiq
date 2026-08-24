@@ -1,5 +1,5 @@
-"""
-ReviewIQ pipeline engine.
+﻿"""
+ScrutinizeIQ pipeline engine.
 
 Reusable functions for the full flow:
     gate -> embed -> reduce+cluster -> label topics -> sentiment -> report
@@ -75,8 +75,8 @@ def cluster(embeddings):
                         random_state=42, init="random").fit_transform(embeddings)
 
     # The scaled settings can still be too coarse for a homogeneous corpus
-    # (TikTok at 74k collapsed into 2 blobs). If the result is degenerate —
-    # almost no clusters, or one cluster swallowing most reviews — retry
+    # (TikTok at 74k collapsed into 2 blobs). If the result is degenerate â€”
+    # almost no clusters, or one cluster swallowing most reviews â€” retry
     # with finer settings before accepting it.
     for attempt in range(3):
         labels = hdbscan.HDBSCAN(min_cluster_size=mcs, min_samples=ms,
@@ -121,7 +121,7 @@ def distinctive_words(cluster_texts, n=6):
     ids = list(cluster_texts.keys())
     docs = [" ".join(cluster_texts[c]) for c in ids]
 
-    # Only words appearing in >= 5 individual reviews may become labels —
+    # Only words appearing in >= 5 individual reviews may become labels â€”
     # otherwise one-off typos ("nextflix") look maximally "distinctive".
     all_reviews = [t for c in ids for t in cluster_texts[c]]
     try:
@@ -162,9 +162,9 @@ def topic_table(df):
         sub = df[df["cluster"] == c]
         label = ", ".join(labels.get(c, []))
         # A cluster swallowing >20% of everything is generic chatter, not a
-        # theme — say so instead of pretending its oddball words are a topic.
+        # theme â€” say so instead of pretending its oddball words are a topic.
         if len(sub) > 0.2 * n_clustered and len(clusters) >= 5:
-            label = f"(general / mixed feedback — {label})"
+            label = f"(general / mixed feedback â€” {label})"
         rows.append({
             "cluster": c,
             "n_reviews": len(sub),
@@ -223,35 +223,35 @@ def build_report(df, topics, app_name):
                f"negative, {sent_pct.get('positive', 0):.0f}% positive.")
     if len(pain):
         summary += (" The biggest pain points are: "
-                    + "; ".join(f"**{name(r)}** ({r.n_reviews} reviews, avg {r.avg_score}★)"
+                    + "; ".join(f"**{name(r)}** ({r.n_reviews} reviews, avg {r.avg_score}â˜…)"
                                 for r in pain.head(3).itertuples()) + ".")
     else:
         summary += (" No single dominant pain-point theme emerged; "
                     "negative feedback is spread across topics.")
 
-    lines = [f"# ReviewIQ Report — {app_name.title()}\n",
+    lines = [f"# ScrutinizeIQ Report â€” {app_name.title()}\n",
              f"*Based on {n:,} reviews analyzed*\n",
              "## Executive summary\n",
              summary]
 
     lines.append("\n## Top pain points\n")
     if len(pain) == 0:
-        lines.append("*(no cluster averaged 2.5★ or below)*")
+        lines.append("*(no cluster averaged 2.5â˜… or below)*")
     for r in pain.head(5).itertuples():
-        lines.append(f"- **{r.top_words}** — {r.n_reviews} reviews, avg {r.avg_score}★")
+        lines.append(f"- **{r.top_words}** â€” {r.n_reviews} reviews, avg {r.avg_score}â˜…")
         lines.append(f"  > \"{best_quote(r.cluster)}\"")
 
     lines.append("\n## What users love\n")
     if len(pros) == 0:
-        lines.append("*(no cluster averaged 4.0★ or above)*")
+        lines.append("*(no cluster averaged 4.0â˜… or above)*")
     for r in pros.head(3).itertuples():
-        lines.append(f"- **{r.top_words}** — {r.n_reviews} reviews, avg {r.avg_score}★")
+        lines.append(f"- **{r.top_words}** â€” {r.n_reviews} reviews, avg {r.avg_score}â˜…")
 
     lines.append("\n## Feature requests\n")
     if len(requests) == 0:
         lines.append("*(no topic where most reviews ask for something)*")
     for r in requests.head(3).itertuples():
-        lines.append(f"- **{r.top_words}** — {r.request_share:.0%} of its "
+        lines.append(f"- **{r.top_words}** â€” {r.request_share:.0%} of its "
                      f"{r.n_reviews} reviews are asking for something")
 
     return "\n".join(lines)
@@ -297,7 +297,7 @@ def main():
     master = pd.read_parquet(DATA / "master_clean_lang.parquet")
     for app in sorted(master["app_name"].unique()):
         # Resume marker: the batch's OWN artifact, not the report file.
-        # (A report generated elsewhere — e.g. the notebook's 10k prototype —
+        # (A report generated elsewhere â€” e.g. the notebook's 10k prototype â€”
         # once made the batch silently skip a full-scale run.)
         done_marker = SCALE_DIR / f"{app}_topics.parquet"
         if done_marker.exists():
@@ -310,3 +310,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

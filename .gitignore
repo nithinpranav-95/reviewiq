@@ -11,3 +11,4 @@ models/
 
 # Python cache junk
 __pycache__/
+*.pyc
