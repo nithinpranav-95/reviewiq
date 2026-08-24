@@ -1,4 +1,3 @@
 [theme]
-# ScrutinizeIQ brand: blue accents instead of Streamlit's default red
+# ReviewIQ brand: blue accents instead of Streamlit's default red
 primaryColor = "#2563EB"
-

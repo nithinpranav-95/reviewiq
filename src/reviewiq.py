@@ -1,5 +1,5 @@
-﻿"""
-ScrutinizeIQ pipeline engine.
+"""
+ReviewIQ pipeline engine.
 
 Reusable functions for the full flow:
     gate -> embed -> reduce+cluster -> label topics -> sentiment -> report
@@ -229,7 +229,7 @@ def build_report(df, topics, app_name):
         summary += (" No single dominant pain-point theme emerged; "
                     "negative feedback is spread across topics.")
 
-    lines = [f"# ScrutinizeIQ Report — {app_name.title()}\n",
+    lines = [f"# ReviewIQ Report — {app_name.title()}\n",
              f"*Based on {n:,} reviews analyzed*\n",
              "## Executive summary\n",
              summary]
@@ -310,5 +310,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
